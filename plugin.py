@@ -137,7 +137,7 @@ class BitcoinWallet(callbacks.Plugin):
             return
 
         balance = self.proxy.getbalance(account, self.registryValue('minConf'))
-        irc.reply("Your balance is %0.02f BTC." % balance)
+        irc.reply("Your balance is %.8g BTC." % balance)
     balance = wrap(balance)
 
     def pay(self, irc, msg, args, accountOrNick, amount):
@@ -157,7 +157,7 @@ class BitcoinWallet(callbacks.Plugin):
             return
         minAmount = self.registryValue('minAmount')
         if amount < minAmount:
-            irc.error("The specified amount is below the minimum of %0.02f BTC." % 
+            irc.error("The specified amount is below the minimum of %.8g BTC." %
                     minAmount)
             return
 
@@ -170,11 +170,11 @@ class BitcoinWallet(callbacks.Plugin):
 
         try:
             if internal:
-                self.log.debug("Bitcoin MOVE %s %s %0.02f", fromAccount, to, amount)
+                self.log.debug("Bitcoin MOVE %s %s %.8g", fromAccount, to, amount)
                 self.proxy.move(fromAccount, to, amount,
                         self.registryValue('minConf'))
             else:
-                self.log.debug("Bitcoin SENDFROM %s %s %0.02f", fromAccount, to, amount)
+                self.log.debug("Bitcoin SENDFROM %s %s %.8g", fromAccount, to, amount)
                 self.proxy.sendfrom(fromAccount, to,
                         amount,self.registryValue('minConf'))
         except JSONRPCException, e:
