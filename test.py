@@ -60,4 +60,17 @@ class BitcoinWalletTestCase(PluginTestCase):
             #world.testing = True
             self.prefix = origuser
 
+    def testPay(self):
+        try:
+            origuser = self.prefix
+            self.prefix = 'nanotube!stuff@stuff/somecloak'
+            self.assertNotError('pay xyz 0.01')
+
+            self.prefix = 'webchat!stuff@gateway/web/freenode'
+            self.assertError('pay xyz 0.01')
+        finally:
+            #world.testing = True
+            self.prefix = origuser
+
+
 # vim:set shiftwidth=4 tabstop=4 expandtab textwidth=79:

@@ -79,6 +79,30 @@ class BitcoinWallet(callbacks.Plugin):
         return '-'.join([self.registryValue('accountNamePrefix'),
             network, nick])
 
+    def _getWalletAccountAddress(self, account):
+        accounts = self.proxy.getaddressesbyaccount(account)
+        if len(accounts) > 0:
+            return accounts[0]
+        else:
+            return None
+
+    def _payToType(self, network, accountOrNick):
+        internal = True
+        status = self.proxy.validateaddress(accountOrNick)
+        if status['isvalid']:
+            toAccount = self.proxy.getaccount(accountOrNick)
+            if toAccount:
+                to = toAccount
+            else:
+                interal = False
+                to = accountOrNick
+        else:
+            toAccount = self._getWalletAccountName(network,
+                    accountOrNick)
+            to = self._getWalletAccountAddress(toAccount)
+        return (internal, to)
+
+
     def bitcoinaddress(self, irc, msg, args):
         """takes no arguments
 
@@ -90,11 +114,9 @@ class BitcoinWallet(callbacks.Plugin):
                       "to use the wallet.")
             return
         account = self._getWalletAccountName(irc.network, msg.nick)
-        accounts = self.proxy.getaddressesbyaccount(account)
-        if len(accounts) == 0:
+        address = self._getWalletAccountAddress(account)
+        if address is None:
             address = self.proxy.getaccountaddress(account)
-        else:
-            address = accounts[0]
         irc.reply("Your bitcoin address is %s" % address)
     bitcoinaddress = wrap(bitcoinaddress)
 
@@ -108,8 +130,8 @@ class BitcoinWallet(callbacks.Plugin):
                       "to use the wallet.")
             return
         account = self._getWalletAccountName(irc.network, msg.nick)
-        accounts = self.proxy.getaddressesbyaccount(account)
-        if len(accounts) == 0:
+        address = self._getWalletAccountAddress(account)
+        if address is None:
             irc.error("You don't yet have a bitcoin address associated with "
                       "your nick. Use 'bitcoinaddress' to create one.")
             return
@@ -118,7 +140,7 @@ class BitcoinWallet(callbacks.Plugin):
         irc.reply("Your balance is %0.02f BTC." % balance)
     balance = wrap(balance)
 
-    def pay(self, irc, msg, args, to, amount):
+    def pay(self, irc, msg, args, accountOrNick, amount):
         """<account|nick> <amount>
 
         Pays the specified <address> or <nick> <amount> bitcoin.
@@ -128,42 +150,32 @@ class BitcoinWallet(callbacks.Plugin):
                       "to use the wallet.")
             return
         fromAccount = self._getWalletAccountName(irc.network, msg.nick)
-        fromAccounts = self.proxy.getaddressesbyaccount(fromAccount)
-        if len(fromAccounts) == 0:
+        fromAddress = self._getWalletAccountAddress(fromAccount)
+        if fromAddress is None:
             irc.error("You don't yet have a bitcoin address associated with "
                       "your nick. Use 'bitcoinaddress' to create one.")
             return
-
         minAmount = self.registryValue('minAmount')
         if amount < minAmount:
             irc.error("The specified amount is below the minimum of %0.02f BTC." % 
                     minAmount)
             return
 
-        internalPayment = True 
-        status = self.proxy.validateaddress(to)
-        if status['isvalid']:
-            toAccount = self.proxy.getaccount(to)
-            if not toAccount:
-                internalPayment = False
-                toAddress = to
-        else:
-            toAccount = self._getWalletAccountName(irc.network, to)
-            toAccounts = self.proxy.getaddressesbyaccount(toAccount)
-            if len(toAccounts) == 0:
-                irc.error("The specified nick doesn't yet have a bitcoin "
-                          "address. Tell them to use 'bitcoinaddress' to "
-                          "create one.")
-                return
+        (internal, to) = self._payToType(irc.network, accountOrNick)
+        if internal and to is None:
+            irc.error("The specified nick doesn't yet have a bitcoin "
+                        "address. Tell them to use 'bitcoinaddress' to "
+                        "create one.")
+            return
 
         try:
-            if internalPayment:
-                print "MOVE %s %s %f" % (fromAccount, toAccount, amount)
-                self.proxy.move(fromAccount, toAccount, amount,
+            if internal:
+                self.log.debug("Bitcoin MOVE %s %s %0.02f", fromAccount, to, amount)
+                self.proxy.move(fromAccount, to, amount,
                         self.registryValue('minConf'))
             else:
-                print "SENDFROM %s %s %f" % (fromAccount, toAddress, amount)
-                self.proxy.sendfrom(fromAccount, toAddress,
+                self.log.debug("Bitcoin SENDFROM %s %s %0.02f", fromAccount, to, amount)
+                self.proxy.sendfrom(fromAccount, to,
                         amount,self.registryValue('minConf'))
         except JSONRPCException, e:
             message = e.error['message']
