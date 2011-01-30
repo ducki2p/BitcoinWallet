@@ -94,7 +94,7 @@ class BitcoinWallet(callbacks.Plugin):
             if toAccount:
                 to = toAccount
             else:
-                interal = False
+                internal = False
                 to = accountOrNick
         else:
             toAccount = self._getWalletAccountName(network,
