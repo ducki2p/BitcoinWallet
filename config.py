@@ -50,7 +50,7 @@ conf.registerGlobalValue(BitcoinWallet, 'accountNamePrefix',
 
 conf.registerGlobalValue(BitcoinWallet, 'jsonRpcUrl',
     registry.String('http://user:password@127.0.0.1:8332', """The JSON RPC URL
-    for the Bitcoin wallet."""))
+    for the Bitcoin wallet.""", private=True))
 
 conf.registerGlobalValue(BitcoinWallet, 'minConf',
     registry.NonNegativeInteger(0, """The amount of confirmations to
