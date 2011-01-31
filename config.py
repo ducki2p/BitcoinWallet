@@ -45,7 +45,7 @@ def configure(advanced):
 BitcoinWallet = conf.registerPlugin('BitcoinWallet')
 
 conf.registerGlobalValue(BitcoinWallet, 'accountNamePrefix',
-    registry.String('BitBot', """Prefix to use for account names in the
+    registry.String('ircbot', """Prefix to use for account names in the
     wallet."""))
 
 conf.registerGlobalValue(BitcoinWallet, 'jsonRpcUrl',
