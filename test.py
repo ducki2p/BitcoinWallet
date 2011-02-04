@@ -33,8 +33,31 @@
 
 from supybot.test import *
 
+class MockJsonProxy:
+    def getaddressesbyaccount(self, account):
+        return [ "14ccB2QFEKZnd1gLUtgr7vWg6JrMeXaQXK" ]
+
+    def validateaddress(self, accountOrNick):
+        return { "isvalid": True }
+
+    def getaccount(self, accountOrNick):
+        return "duck"
+
+    def getaccountaddress(self, account):
+        return "14ccB2QFEKZnd1gLUtgr7vWg6JrMeXaQXK"
+
+    def getbalance(self, account, minConf):
+        return 1234.12345678
+
+    def move(self, fromAccount, to, amount, minConf):
+        return True
+
+    def sendfrom(self, fromAccount, to, amount, minConf):
+        return True
+
 class BitcoinWalletTestCase(PluginTestCase):
     plugins = ('BitcoinWallet','User')
+    world.mockJsonProxy = MockJsonProxy()
 
     def testBalance(self):
         try:

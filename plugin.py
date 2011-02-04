@@ -26,6 +26,7 @@ import supybot.ircutils as ircutils
 import supybot.callbacks as callbacks
 from supybot import conf
 from supybot import ircdb
+from supybot import world
 
 from jsonrpc import JSONRPCException, ServiceProxy
 
@@ -52,7 +53,10 @@ class BitcoinWallet(callbacks.Plugin):
     def __init__(self, irc):
         self.__parent = super(BitcoinWallet, self)
         self.__parent.__init__(irc)
-        self.proxy = self._getServiceProxy()
+        if world.testing:
+            self.proxy = world.mockJsonProxy
+        else:
+            self.proxy = self._getServiceProxy()
 
     def die(self):
         self.__parent.die()
