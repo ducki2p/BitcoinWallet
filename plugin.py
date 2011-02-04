@@ -29,6 +29,53 @@ from supybot import ircdb
 from supybot import world
 
 from jsonrpc import JSONRPCException, ServiceProxy
+import os.path
+import sqlite3
+import time
+
+class BitcoinWalletDB(object):
+    def __init__(self, filename):
+        self.filename = filename
+        self.db = None
+
+    def open(self):
+        if os.path.exists(self.filename):
+            db = sqlite3.connect(self.filename, check_same_thread = False)
+            db.text_factory = str
+            self.db = db
+            return
+
+        db = sqlite3.connect(self.filename, check_same_thread = False)
+        db.text_factory = str
+        self.db = db
+        cursor = self.db.cursor()
+        cursor.execute("""CREATE TABLE users (
+                          id INTEGER PRIMARY KEY,
+                          created_at INTEGER,
+                          network TEXT,
+                          nick TEXT,
+                          host TEXT)
+                          """)
+        self.db.commit()
+        return
+
+    def close(self):
+        self.db.close()
+
+    def addUser(self, network, nick, host):
+        cursor = self.db.cursor()
+        timestamp = time.time()
+        cursor.execute("""INSERT INTO users VALUES
+                          (NULL, ?, ?, ?, ?)""",
+                       (timestamp, network, nick, host))
+        self.db.commit()
+        return cursor.lastrowid
+
+    def getUserHost(self, network, nick):
+        cursor = self.db.cursor()
+        cursor.execute("""SELECT host FROM users WHERE network LIKE ? AND nick LIKE ?""", 
+                      (network, nick))
+        return cursor.fetchall()
 
 def getPositiveFloat(irc, msg, args, state, type='positive floating point number'):
     try:
@@ -57,9 +104,13 @@ class BitcoinWallet(callbacks.Plugin):
             self.proxy = world.mockJsonProxy
         else:
             self.proxy = self._getServiceProxy()
+        self.filename = conf.supybot.directories.data.dirize('BitcoinWallet.db')
+        self.db = BitcoinWalletDB(self.filename)
+        self.db.open()
 
     def die(self):
         self.__parent.die()
+        self.db.close()
 
     def _checkHost(self, host):
         if self.registryValue('requireCloak'):
@@ -79,9 +130,9 @@ class BitcoinWallet(callbacks.Plugin):
         # username/password
         return ServiceProxy(self.registryValue("jsonRpcUrl"))
 
-    def _getWalletAccountName(self, network, nick):
+    def _getWalletAccountName(self, network, host):
         return '-'.join([self.registryValue('accountNamePrefix'),
-            network, nick])
+            network, host])
 
     def _getWalletAccountAddress(self, account):
         accounts = self.proxy.getaddressesbyaccount(account)
@@ -94,6 +145,7 @@ class BitcoinWallet(callbacks.Plugin):
         internal = True
         status = self.proxy.validateaddress(accountOrNick)
         if status['isvalid']:
+            # valid bitcoin address provided, so check if it is an internal one
             toAccount = self.proxy.getaccount(accountOrNick)
             if toAccount:
                 to = toAccount
@@ -101,11 +153,15 @@ class BitcoinWallet(callbacks.Plugin):
                 internal = False
                 to = accountOrNick
         else:
-            toAccount = self._getWalletAccountName(network,
-                    accountOrNick)
-            to = self._getWalletAccountAddress(toAccount)
+            # maybe it is a nick
+            host = self.db.getUserHost(network, accountOrNick)
+            to = None
+            if len(host):
+                toAccount = self._getWalletAccountName(network, host[0][0])
+                toAddress = self._getWalletAccountAddress(toAccount)
+                if toAddress is not None:
+                    to = toAccount
         return (internal, to)
-
 
     def bitcoinaddress(self, irc, msg, args):
         """takes no arguments
@@ -117,10 +173,11 @@ class BitcoinWallet(callbacks.Plugin):
             irc.error("For identification purposes, you must have a freenode cloak "
                       "to use the wallet.")
             return
-        account = self._getWalletAccountName(irc.network, msg.nick)
+        account = self._getWalletAccountName(irc.network, msg.host)
         address = self._getWalletAccountAddress(account)
         if address is None:
             address = self.proxy.getaccountaddress(account)
+            self.db.addUser(irc.network, msg.nick, msg.host)
         irc.reply("Your bitcoin address is %s" % address)
     bitcoinaddress = wrap(bitcoinaddress)
 
@@ -133,7 +190,7 @@ class BitcoinWallet(callbacks.Plugin):
             irc.error("For identification purposes, you must have a freenode cloak "
                       "to use the wallet.")
             return
-        account = self._getWalletAccountName(irc.network, msg.nick)
+        account = self._getWalletAccountName(irc.network, msg.host)
         address = self._getWalletAccountAddress(account)
         if address is None:
             irc.error("You don't yet have a bitcoin address associated with "
@@ -153,7 +210,7 @@ class BitcoinWallet(callbacks.Plugin):
             irc.error("For identification purposes, you must have a freenode cloak "
                       "to use the wallet.")
             return
-        fromAccount = self._getWalletAccountName(irc.network, msg.nick)
+        fromAccount = self._getWalletAccountName(irc.network, msg.host)
         fromAddress = self._getWalletAccountAddress(fromAccount)
         if fromAddress is None:
             irc.error("You don't yet have a bitcoin address associated with "
